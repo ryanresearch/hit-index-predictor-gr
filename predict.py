@@ -1,31 +1,45 @@
-from flask import Flask, request, jsonify
-import joblib
-import numpy as np
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from typing import List
+from fastapi.middleware.cors import CORSMiddleware
 
-app = Flask(__name__)
+app = FastAPI()
 
-# Load or define model (example: manually weighted logistic-style)
-def predict_score(features):
-    # Feature order: [spotify, shazam, tiktok, youtube, airplay_score, tiktok_streams]
-    weights = [0.25, 0.25, 0.2, 0.15, 0.1, 0.05]
-    max_streams = 500000  # Normalization cap
-    features = np.array(features, dtype=float)
-    features[5] = min(features[5], max_streams) / max_streams  # Normalize TikTok streams
-    score = np.dot(weights, features)
-    return round(float(score), 4)
+# CORS for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    data = request.get_json()
-    if not data or 'features' not in data:
-        return jsonify({'error': 'Invalid input'}), 400
+class SongFeatures(BaseModel):
+    spotify: int
+    shazam: int
+    tiktok: int
+    youtube: int
+    airplay_score: int
+    tiktok_streams: int
+    mentions: int
 
-    features = data['features']  # Must be list of 6 items
-    if len(features) != 6:
-        return jsonify({'error': 'Expected 6 features'}), 400
+class SongsRequest(BaseModel):
+    songs: List[SongFeatures]
 
-    probability = predict_score(features)
-    return jsonify({'probability': probability})
+@app.post("/predict")
+def predict(request: SongsRequest):
+    # Dummy example - Replace with real ML logic
+    probabilities = []
+    for song in request.songs:
+        score = (
+            0.2 * song.spotify +
+            0.2 * song.shazam +
+            0.2 * song.tiktok +
+            0.2 * song.youtube +
+            0.1 * song.airplay_score +
+            0.05 * song.tiktok_streams +
+            0.05 * song.mentions
+        ) / 10
+        probabilities.append(min(score, 1.0))  # Make sure it's 0–1
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+    return {"probabilities": probabilities}
+
