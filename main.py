@@ -1,9 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
-import joblib
-import numpy as np
+from typing import List
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# CORS for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class SongFeatures(BaseModel):
     spotify: int
@@ -14,22 +22,24 @@ class SongFeatures(BaseModel):
     tiktok_streams: int
     mentions: int
 
-class SongRequest(BaseModel):
-    songs: list[SongFeatures]
-
-model = joblib.load("model.pkl")
+class SongsRequest(BaseModel):
+    songs: List[SongFeatures]
 
 @app.post("/predict")
-def predict_probabilities(request: SongRequest):
-    X = [[
-        song.spotify,
-        song.shazam,
-        song.tiktok,
-        song.youtube,
-        song.airplay_score,
-        song.tiktok_streams,
-        song.mentions
-    ] for song in request.songs]
+def predict(request: SongsRequest):
+    # Dummy example - Replace with real ML logic
+    probabilities = []
+    for song in request.songs:
+        score = (
+            0.2 * song.spotify +
+            0.2 * song.shazam +
+            0.2 * song.tiktok +
+            0.2 * song.youtube +
+            0.1 * song.airplay_score +
+            0.05 * song.tiktok_streams +
+            0.05 * song.mentions
+        ) / 10
+        probabilities.append(min(score, 1.0))  # Make sure it's 0–1
 
-    probabilities = model.predict_proba(np.array(X))[:, 1]
-    return {"probabilities": probabilities.tolist()}
+    return {"probabilities": probabilities}
+
