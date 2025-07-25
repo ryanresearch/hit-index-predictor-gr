@@ -1,6 +1,7 @@
 flask
 numpy
 
-flask
+fastapi
+uvicorn
 joblib
 scikit-learn
