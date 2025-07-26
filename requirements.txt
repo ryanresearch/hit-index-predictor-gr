@@ -1,8 +1,7 @@
-flask
-numpy
-
 fastapi
 uvicorn
-joblib
-pandas
+pydantic
 scikit-learn
+pandas
+joblib
+python-multipart

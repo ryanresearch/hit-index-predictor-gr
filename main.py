@@ -1,15 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-from fastapi.middleware.cors import CORSMiddleware
-from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 import joblib
 import os
 
 app = FastAPI()
 
-# CORS (dev mode)
+# Allow all CORS for development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Input structure
+# Define input model
 class SongFeatures(BaseModel):
     spotify: int
     shazam: int
@@ -30,35 +30,40 @@ class SongFeatures(BaseModel):
 class SongsRequest(BaseModel):
     songs: List[SongFeatures]
 
-# Load trained model if available
-model_path = "model.pkl"
-model = joblib.load(model_path) if os.path.exists(model_path) else None
+# Global ML model
+model = None
 
+# Predict endpoint
 @app.post("/predict")
 def predict(request: SongsRequest):
     global model
-    if not model:
+    if model is None:
         return {"error": "No trained model available."}
-    
-    df = pd.DataFrame([song.dict() for song in request.songs])
-    predictions = model.predict_proba(df)[:, 1]
-    return {"probabilities": predictions.tolist()}
 
-@app.get("/retrain")
-def retrain():
+    X = pd.DataFrame([song.dict() for song in request.songs])
+    probabilities = model.predict_proba(X)[:, 1].tolist()
+    return {"probabilities": probabilities}
+
+# Retrain endpoint
+@app.post("/retrain")
+def retrain(file: UploadFile = File(...)):
     global model
     try:
-        df = pd.read_csv("training_data.csv")
-        if "label" not in df.columns:
-            return {"error": "'label' column missing from training_data.csv"}
+        contents = file.file.read().decode('utf-8')
+        from io import StringIO
+        df = pd.read_csv(StringIO(contents))
 
-        X = df.drop(columns=["label"])
-        y = df["label"]
+        required_cols = ['spotify', 'shazam', 'tiktok', 'youtube', 'airplay_score', 'tiktok_streams', 'mentions', 'hit']
+        if not all(col in df.columns for col in required_cols):
+            return {"error": "Missing required columns."}
 
-        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        X = df[required_cols[:-1]]
+        y = df['hit']
+
+        model = LogisticRegression(max_iter=1000)
         model.fit(X, y)
-        joblib.dump(model, model_path)
+        joblib.dump(model, "model.pkl")
 
-        return {"status": "Retrained successfully", "samples": len(df)}
+        return {"message": "Model retrained successfully."}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e)}    
