@@ -40,8 +40,19 @@ def predict(request: SongsRequest):
         return {"error": "No trained model available."}
 
     input_data = pd.DataFrame([song.dict() for song in request.songs])
-    probabilities = model.predict_proba(input_data)[:, 1]
-    return {"probabilities": probabilities.tolist()}
+
+    try:
+        proba = model.predict_proba(input_data)
+        # Normalize to 0–1 scale using class weights (0, 1, 2 → scaled)
+        probabilities = []
+        for p in proba:
+            # Weighted sum: 0×p0 + 0.5×p1 + 1×p2
+            score = round((0.5 * p[1] + 1.0 * p[2]), 3)
+            probabilities.append(min(score, 1.0))
+    except:
+        return {"error": "Prediction failed."}
+
+    return {"probabilities": probabilities}
 
 # Retrain endpoint
 @app.post("/retrain")
@@ -56,6 +67,7 @@ async def retrain(file: UploadFile = File(...)):
     X = df[required_columns[:-1]]
     y = df["label"]
 
+    # Use multiclass classifier (for 0, 1, 2 classes)
     model = RandomForestClassifier()
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
